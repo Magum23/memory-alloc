@@ -7,10 +7,16 @@
 //Constants
 #define MEMORY_HEADER_SIZE 0x4
 #define OFFSET_SIZE 0x4
+#define HEADER_SIZE 0x4
+#define FOOTER_SIZE 0x4
+#define MIN_PAYLOAD_SIZE 0x8
+#define MIN_MEMORY_BLOCK_SIZE 0x10
 
 //Macros
 #define THROW_ERROR(message) (fprintf(stdout, "%s\n", message), exit(1))
-#define LIST_COUNT(size) (log(/))
+#define LIST_COUNT(size) ((int)(floor((log(size) / log(2))) - 2))
+#define LIST_SIZE(size) (LIST_COUNT(size) * OFFSET_SIZE)
+#define FIRST_FREE_BLOCK_SIZE(size) (size - MEMORY_HEADER_SIZE - LIST_SIZE(size) - HEADER_SIZE - FOOTER_SIZE)
 
 //Type definitions
 typedef uint32_t u_int;
@@ -31,8 +37,8 @@ int main(void)
     static const int small_memory_sizes[] = {50, 100, 200};
     static const int large_memory_sizes[] = {1000, 5000, 10000, 25000, 50000};
 
-    char region[large_memory_sizes[0]];
-    memory_init(region, large_memory_sizes[0]);
+    char region[small_memory_sizes[2]];
+    memory_init(region, small_memory_sizes[2]);
     return 0;
 }
 
@@ -52,9 +58,24 @@ void memory_init(void *ptr, u_int size)
 
     heap = ptr; //when there is no error assign ptr address to heap global variable
 
-    //Clear array a.k.a "heap"
+    //Clear the array a.k.a "heap"
     memset(ptr, 0, size);
 
     //Memory header
-    *((int *)ptr) = size - MEMORY_HEADER_SIZE;
+    *((int *)ptr) = size - MEMORY_HEADER_SIZE - LIST_SIZE(size);
+    //Create free block
+    //First casting to char (because of size 1B), then to int so I can write the offset to 4B as integer
+    *((int *)(((char *)ptr) + MEMORY_HEADER_SIZE + LIST_SIZE(size))) = FIRST_FREE_BLOCK_SIZE(size); //Header of first block
+    *((int *)(((char *)ptr) + size - FOOTER_SIZE)) = FIRST_FREE_BLOCK_SIZE(size);                   //Footer of first block
+    printf("%d", *((int *)(((char *)ptr) + MEMORY_HEADER_SIZE + LIST_SIZE(size))));
+    printf("%d", *((int *)(((char *)ptr) + size - FOOTER_SIZE)));
+
+    for (int n = 3; n <= LIST_COUNT(size) + 2; n++) //starting from 2^3, there is LIST_COUNT+2 because I dont use super small blocks however I have to use the power
+    {
+        if (pow(2, n) >= FIRST_FREE_BLOCK_SIZE(size) || n == LIST_COUNT(size) + 2) //if it is in correct sector or on end of list
+        {
+            *((int *)(((char *)ptr) + MEMORY_HEADER_SIZE + (n - 3) * OFFSET_SIZE)) = MEMORY_HEADER_SIZE + LIST_SIZE(size) + HEADER_SIZE; //save offset to first block
+            break;
+        }
+    }
 }
