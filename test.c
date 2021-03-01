@@ -6,15 +6,8 @@ void *heap = NULL;
 int main(void)
 {
 
-    char region[100];
-    heap = region;
-
-    memset(heap, 1, 100);
-    void *ptr = heap;
-
-    int a = 5;
-
-    *((void **)(ptr)) = &a;
+    char region[] = {-124, 0, 0, 0};
+    printf("%d\n", *(int *)region);
 
     return 0;
 }
