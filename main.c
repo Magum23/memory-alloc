@@ -24,8 +24,8 @@
 #define GET_PREV_OFFSET(ptr) (*(int *)((char *)ptr + OFFSET_SIZE))
 #define TOGGLE_FULL_FREE(size) (size * (-1))
 #define ABS(x) (((x) < 0) ? -(x) : (x))
-#define FIRST_BLOCK_OFFSET
-#define LAST_BLOCK_OFFSSET //
+#define FIRST_BLOCK_OFFSET (MEMORY_HEADER_SIZE + LIST_SIZE((*(int *)heap) + MEMORY_HEADER_SIZE) + HEADER_SIZE)
+#define LAST_BLOCK_OFFSSET ((*(int *)heap) + MEMORY_HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)heap + (*(int *)heap) + MEMORY_HEADER_SIZE - FOOTER_SIZE)))
 
 //Type definitions
 typedef uint32_t u_int;
@@ -40,6 +40,10 @@ int find_free_block(u_int size); //returns offset for appropriate block, uses be
 
 int memory_free(void *ptr);
 int get_memory_offset(void *ptr);
+void case1(void *ptr);
+void case2(void *ptr);
+void case3(void *ptr);
+void case4(void *ptr);
 
 int memory_check(void *ptr);
 int check_memory_range(void *ptr);
@@ -67,6 +71,13 @@ int main(void)
     char *p6 = memory_alloc(10);
     memory_free(p5); //case 1
     memory_free(p6); //case 4
+    char *p7 = memory_alloc(50);
+    char *p8 = memory_alloc(50);
+    char *p9 = memory_alloc(14);
+    memory_free(p8);
+    memory_free(p9);
+    memory_free(p1);
+    memory_free(p0);
 
     return 0;
 }
@@ -307,14 +318,281 @@ int get_memory_offset(void *ptr)
     return 0;
 }
 
+void case1(void *ptr)
+{
+    *(int *)((char *)ptr - HEADER_SIZE) = TOGGLE_FULL_FREE(*(int *)((char *)ptr - HEADER_SIZE));
+    *(int *)((char *)ptr + (*(int *)((char *)ptr - HEADER_SIZE))) = TOGGLE_FULL_FREE(*(int *)((char *)ptr + (*(int *)((char *)ptr - HEADER_SIZE))));
+    memset(ptr, 0, *(int *)((char *)ptr - HEADER_SIZE));
+
+    //if the block is free the just save the offset to the list
+    if (*(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) == 0)
+    {
+        *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
+    }
+    else
+    {
+        //save the offset of free block to the our new free block
+        *(int *)ptr = *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE)));
+        //save offset of our free block as prev to the original free block
+        *(int *)((char *)heap + *(int *)ptr + OFFSET_SIZE) = get_memory_offset(ptr);
+        //put our new free block to the start of the list
+        *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
+    }
+}
+void case2(void *ptr)
+{
+    //copy prev and next from next block
+    *(int *)ptr = *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE);
+    *(int *)((char *)ptr + OFFSET_SIZE) = *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE + OFFSET_SIZE);
+    //set new block header
+    *(int *)((char *)ptr - HEADER_SIZE) = ABS(*(int *)((char *)ptr - HEADER_SIZE)) + HEADER_SIZE + FOOTER_SIZE + *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE);
+    //check if new free block will stay in the same free list
+    if (get_list_offset(*(int *)((char *)ptr - HEADER_SIZE)) == get_list_offset(*(int *)((char *)ptr + *(int *)((char *)ptr - HEADER_SIZE))))
+    {
+        //if it stays in the same list
+        if (HAS_NEXT(ptr) && HAS_PREV(ptr))
+        { //if the block is in the middle of free blocks
+            //set next->prev to the new offset
+            *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = get_memory_offset(ptr);
+            //set prev->next to the new offset
+            *(int *)((char *)heap + *(int *)((char *)ptr + OFFSET_SIZE)) = get_memory_offset(ptr);
+        }
+        else if (HAS_NEXT(ptr))
+        {
+            //set next->prev to the new offset
+            *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = get_memory_offset(ptr);
+            //update offset of the list in the begining
+            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
+        }
+        else if (HAS_PREV(ptr))
+        {
+            //set prev->next to the new offset
+            *(int *)((char *)heap + *(int *)((char *)ptr + OFFSET_SIZE) + OFFSET_SIZE) = get_memory_offset(ptr);
+        }
+        else
+        {
+            //if it was alone in the list, just update the offset of the list
+            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
+        }
+    }
+    else //if it doesnt stay in the same list
+    {
+        if (HAS_NEXT(ptr) && HAS_PREV(ptr))
+        { //if the block is in the middle of free blocks
+            //set next->prev to the curr->prev
+            *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = *(int *)((char *)ptr + OFFSET_SIZE);
+            //set prev->next to the curr->next
+            *(int *)((char *)heap + (*(int *)((char *)ptr + OFFSET_SIZE))) = *(int *)ptr;
+        }
+        else if (HAS_NEXT(ptr))
+        {
+            //set next->prev to 0
+            *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = 0;
+            //set next block to begining of the list
+            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr + (*(int *)((char *)ptr - HEADER_SIZE))))) = (*(int *)ptr);
+        }
+        else if (HAS_PREV(ptr))
+        {
+            //set prev->next to 0
+            *(int *)((char *)heap + (*(int *)((char *)ptr + OFFSET_SIZE))) = 0;
+        }
+        else
+        {
+            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr + *(int *)((char *)ptr - HEADER_SIZE)))) = 0;
+        }
+
+        memset(ptr, 0, 2 * OFFSET_SIZE); //remove old offsets
+
+        if (*(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) == 0)
+        {
+            //if there is nothing just make it first free block of the list
+            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
+        }
+        else
+        {
+            //set new block next to what was before in the begining of the list
+            *(int *)ptr = *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE)));
+            //set original block -> prev to the new free block
+            *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = get_memory_offset(ptr);
+            //save to the begining of the list
+            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
+        }
+    }
+    //set new block footer
+    *(int *)((char *)ptr + *(int *)((char *)ptr - HEADER_SIZE)) = *(int *)((char *)ptr - HEADER_SIZE);
+    memset((char *)ptr + 2 * OFFSET_SIZE, 0, ABS(*(int *)((char *)ptr - HEADER_SIZE)) - 2 * OFFSET_SIZE);
+}
+void case3(void *ptr)
+{
+    //set new header
+    (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) - HEADER_SIZE)) = (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + HEADER_SIZE + FOOTER_SIZE;
+    //set footer to original free block size (for future manipulation)
+    *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE))) = (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE));
+
+    //set ptr to start of the free block
+    ptr = ((char *)ptr - HEADER_SIZE - FOOTER_SIZE - (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)));
+    //set memory to 0 except first offset 8 bytes
+    memset((char *)ptr + 2 * OFFSET_SIZE, 0, ABS(*(int *)((char *)ptr - HEADER_SIZE)) - 2 * OFFSET_SIZE);
+
+    //check if new free block will not stay in the same free list
+    if (!(get_list_offset(*(int *)((char *)ptr - HEADER_SIZE)) == get_list_offset(*(int *)((char *)ptr + *(int *)((char *)ptr - HEADER_SIZE)))))
+    {
+        //if it doesnt stay in the same list
+
+        if (HAS_NEXT(ptr) && HAS_PREV(ptr))
+        { //if the block is in the middle of free blocks
+            //set next->prev to the curr->prev
+            *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = *(int *)((char *)ptr + OFFSET_SIZE);
+            //set prev->next to the curr->next
+            *(int *)((char *)heap + (*(int *)((char *)ptr + OFFSET_SIZE))) = *(int *)ptr;
+        }
+        else if (HAS_NEXT(ptr))
+        {
+            //set next->prev to 0
+            *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = 0;
+            //set next block to begining of the list
+            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr + (*(int *)((char *)ptr - HEADER_SIZE))))) = (*(int *)ptr);
+        }
+        else if (HAS_PREV(ptr))
+        {
+            //set prev->next to 0
+            *(int *)((char *)heap + (*(int *)((char *)ptr + OFFSET_SIZE))) = 0;
+        }
+
+        memset(ptr, 0, 2 * OFFSET_SIZE); //remove old offsets
+
+        if (*(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) == 0)
+        {
+            //if there is nothing just make it first free block of the list
+            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
+            //set old list block to 0
+            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr + (*(int *)((char *)ptr - HEADER_SIZE))))) = 0;
+        }
+        else
+        {
+            //set new block next to what was before in the begining of the list
+            *(int *)ptr = *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE)));
+            //set original block -> prev to the new free block
+            *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = get_memory_offset(ptr);
+            //save to the begining of the list
+            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
+        }
+    }
+
+    //set new block footer
+    *(int *)((char *)ptr + *(int *)((char *)ptr - HEADER_SIZE)) = *(int *)((char *)ptr - HEADER_SIZE);
+}
+void case4(void *ptr)
+{
+    //working with left free block
+
+    if (HAS_NEXT((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE))) && HAS_PREV((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE))))
+    {
+        //set next->prev to curr->prev
+        *(int *)((char *)heap + (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)))) + OFFSET_SIZE) = *(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) + OFFSET_SIZE);
+        //set prev->next to curr->next
+        *(int *)((char *)heap + (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) + OFFSET_SIZE))) = *(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)));
+    }
+    else if (HAS_NEXT((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE))))
+    {
+        //set next->prev to 0
+        *(int *)((char *)heap + *(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE))) + OFFSET_SIZE) = 0;
+        //set list offset to next block offset
+        *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE))) = *(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)));
+    }
+    else if (HAS_PREV((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE))))
+    {
+        //set prev->next to 0
+        *(int *)((char *)heap + *(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) + OFFSET_SIZE)) = 0;
+    }
+    else
+    {
+        //if the free block is alone in the list just remove it
+        *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE))) = 0;
+    }
+
+    //working with right free block
+    if (HAS_NEXT((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE) && HAS_PREV((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE))
+    {
+        //set next->prev to curr->prev
+        *(int *)((char *)heap + (*(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE)) + OFFSET_SIZE) = *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE + OFFSET_SIZE);
+        //set prev->next to curr->next
+        *(int *)((char *)heap + (*(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE + OFFSET_SIZE))) = *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE);
+    }
+    else if (HAS_NEXT((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE))
+    {
+        //set next->prev to 0
+        *(int *)((char *)heap + *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE) + OFFSET_SIZE) = 0;
+        //set list offset to next block offset
+        *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE))) = *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE);
+    }
+    else if (HAS_PREV((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE))
+    {
+        //set prev->next to 0
+        *(int *)((char *)heap + *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE + OFFSET_SIZE)) = 0;
+    }
+    else
+    {
+        //if the free block is alone in the list just remove it
+        *(int *)((char *)heap + get_list_offset(*(int *)(char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE)) = 0;
+    }
+
+    //fuse the left side and the right side together
+
+    //set new free block header
+    *(int *)((char *)ptr - HEADER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) - FOOTER_SIZE - HEADER_SIZE) = ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) + FOOTER_SIZE + HEADER_SIZE + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE + ABS(*(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE));
+    //set new pointer for ease of use
+    ptr = ((char *)ptr - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) - FOOTER_SIZE - HEADER_SIZE);
+    //set the free memory to 0
+    memset(ptr, 0, *(int *)((char *)ptr - HEADER_SIZE));
+    //set new free block footer
+    *(int *)((char *)ptr + (*(int *)((char *)ptr - HEADER_SIZE))) = *(int *)((char *)ptr - HEADER_SIZE);
+    //add new offset to the list
+    if (*(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) == 0)
+    {
+        //if the list was empty before, set the list offset to ptr
+        *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
+    }
+    else
+    {
+        //if there is already free block in the list, just put it in the begining
+
+        *(int *)ptr = *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE)));
+        *(int *)((char *)heap + (*(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE)))) + OFFSET_SIZE) = get_memory_offset(ptr);
+        //put it in the begining of the list
+        *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
+    }
+}
+
 int memory_free(void *ptr)
 {
-    //ptr is expected to be a valid pointer
-
-    //TODO what if I want to free first block, what will it check ?, same for the last
-
-    //case one
-    /*
+    if (ptr == (char *)heap + FIRST_BLOCK_OFFSET)
+    {
+        if (*(int *)((char *)ptr + TOGGLE_FULL_FREE(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE) < 0)
+        {
+            //if the right side is allocated
+            case1(ptr);
+        }
+        else
+        {
+            case2(ptr);
+        }
+    }
+    else if (ptr == (char *)heap + LAST_BLOCK_OFFSSET)
+    {
+        if (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE) < 0)
+        {
+            //if the left side id allocated
+            case1(ptr);
+        }
+        else
+        {
+            case3(ptr);
+        }
+    }
+    else
+    {
+        /*
 
         +---------------------+
         |      Allocated      |
@@ -329,31 +607,12 @@ int memory_free(void *ptr)
         +---------------------+
 
     */
-    if ((*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE) < 0) && (*(int *)((char *)ptr + TOGGLE_FULL_FREE(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE) < 0))
-    {
-        printf("first\n");
-
-        *(int *)((char *)ptr - HEADER_SIZE) = TOGGLE_FULL_FREE(*(int *)((char *)ptr - HEADER_SIZE));
-        *(int *)((char *)ptr + (*(int *)((char *)ptr - HEADER_SIZE))) = TOGGLE_FULL_FREE(*(int *)((char *)ptr + (*(int *)((char *)ptr - HEADER_SIZE))));
-        memset(ptr, 0, *(int *)((char *)ptr - HEADER_SIZE));
-
-        //if the block is free the just save the offset to the list
-        if (*(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) == 0)
+        if ((*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE) < 0) && (*(int *)((char *)ptr + TOGGLE_FULL_FREE(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE) < 0))
         {
-            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
+            case1(ptr);
         }
-        else
-        {
-            //save the offset of free block to the our new free block
-            *(int *)ptr = *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE)));
-            //save offset of our free block as prev to the original free block
-            *(int *)((char *)heap + *(int *)ptr + OFFSET_SIZE) = get_memory_offset(ptr);
-            //put our new free block to the start of the list
-            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
-        }
-    }
 
-    /*
+        /*
 
         +---------------------+
         |      Allocated      |
@@ -369,92 +628,12 @@ int memory_free(void *ptr)
 
     */
 
-    else if ((*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE) < 0) && (*(int *)((char *)ptr + TOGGLE_FULL_FREE(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE) > 0))
-    {
-        printf("second\n");
-        //copy prev and next from next block
-        *(int *)ptr = *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE);
-        *(int *)((char *)ptr + OFFSET_SIZE) = *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE + OFFSET_SIZE);
-        //set new block header
-        *(int *)((char *)ptr - HEADER_SIZE) = ABS(*(int *)((char *)ptr - HEADER_SIZE)) + HEADER_SIZE + FOOTER_SIZE + *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE);
-        //check if new free block will stay in the same free list
-        if (get_list_offset(*(int *)((char *)ptr - HEADER_SIZE)) == get_list_offset(*(int *)((char *)ptr + *(int *)((char *)ptr - HEADER_SIZE))))
+        else if ((*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE) < 0) && (*(int *)((char *)ptr + TOGGLE_FULL_FREE(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE) > 0))
         {
-            //if it stays in the same list
-            if (HAS_NEXT(ptr) && HAS_PREV(ptr))
-            { //if the block is in the middle of free blocks
-                //set next->prev to the new offset
-                *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = get_memory_offset(ptr);
-                //set prev->next to the new offset
-                *(int *)((char *)heap + *(int *)((char *)ptr + OFFSET_SIZE)) = get_memory_offset(ptr);
-            }
-            else if (HAS_NEXT(ptr))
-            {
-                //set next->prev to the new offset
-                *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = get_memory_offset(ptr);
-                //update offset of the list in the begining
-                *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
-            }
-            else if (HAS_PREV(ptr))
-            {
-                //set prev->next to the new offset
-                *(int *)((char *)heap + *(int *)((char *)ptr + OFFSET_SIZE) + OFFSET_SIZE) = get_memory_offset(ptr);
-            }
-            else
-            {
-                //if it was alone in the list, just update the offset of the list
-                *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
-            }
+            case2(ptr);
         }
-        else //if it doesnt stay in the same list
-        {
-            if (HAS_NEXT(ptr) && HAS_PREV(ptr))
-            { //if the block is in the middle of free blocks
-                //set next->prev to the curr->prev
-                *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = *(int *)((char *)ptr + OFFSET_SIZE);
-                //set prev->next to the curr->next
-                *(int *)((char *)heap + (*(int *)((char *)ptr + OFFSET_SIZE))) = *(int *)ptr;
-            }
-            else if (HAS_NEXT(ptr))
-            {
-                //set next->prev to 0
-                *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = 0;
-                //set next block to begining of the list
-                *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr + (*(int *)((char *)ptr - HEADER_SIZE))))) = (*(int *)ptr);
-            }
-            else if (HAS_PREV(ptr))
-            {
-                //set prev->next to 0
-                *(int *)((char *)heap + (*(int *)((char *)ptr + OFFSET_SIZE))) = 0;
-            }
-            else
-            {
-                *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr + *(int *)((char *)ptr - HEADER_SIZE)))) = 0;
-            }
 
-            memset(ptr, 0, 2 * OFFSET_SIZE); //remove old offsets
-
-            if (*(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) == 0)
-            {
-                //if there is nothing just make it first free block of the list
-                *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
-            }
-            else
-            {
-                //set new block next to what was before in the begining of the list
-                *(int *)ptr = *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE)));
-                //set original block -> prev to the new free block
-                *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = get_memory_offset(ptr);
-                //save to the begining of the list
-                *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
-            }
-        }
-        //set new block footer
-        *(int *)((char *)ptr + *(int *)((char *)ptr - HEADER_SIZE)) = *(int *)((char *)ptr - HEADER_SIZE);
-        memset((char *)ptr + 2 * OFFSET_SIZE, 0, ABS(*(int *)((char *)ptr - HEADER_SIZE)) - 2 * OFFSET_SIZE);
-    }
-
-    /*
+        /*
    
         +---------------------+
         |        Free         |
@@ -469,68 +648,11 @@ int memory_free(void *ptr)
         +---------------------+
 
    */
-    else if ((*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE) > 0) && (*(int *)((char *)ptr + TOGGLE_FULL_FREE(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE) < 0))
-    {
-        printf("third\n");
-        //set new header
-        (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) - HEADER_SIZE)) = (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + HEADER_SIZE + FOOTER_SIZE;
-        //set footer to original free block size (for future manipulation)
-        *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE))) = (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE));
-
-        //set ptr to start of the free block
-        ptr = ((char *)ptr - HEADER_SIZE - FOOTER_SIZE - (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)));
-        //set memory to 0 except first offset 8 bytes
-        memset((char *)ptr + 2 * OFFSET_SIZE, 0, ABS(*(int *)((char *)ptr - HEADER_SIZE)) - 2 * OFFSET_SIZE);
-
-        //check if new free block will not stay in the same free list
-        if (!(get_list_offset(*(int *)((char *)ptr - HEADER_SIZE)) == get_list_offset(*(int *)((char *)ptr + *(int *)((char *)ptr - HEADER_SIZE)))))
+        else if ((*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE) > 0) && (*(int *)((char *)ptr + TOGGLE_FULL_FREE(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE) < 0))
         {
-            //if it doesnt stay in the same list
-
-            if (HAS_NEXT(ptr) && HAS_PREV(ptr))
-            { //if the block is in the middle of free blocks
-                //set next->prev to the curr->prev
-                *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = *(int *)((char *)ptr + OFFSET_SIZE);
-                //set prev->next to the curr->next
-                *(int *)((char *)heap + (*(int *)((char *)ptr + OFFSET_SIZE))) = *(int *)ptr;
-            }
-            else if (HAS_NEXT(ptr))
-            {
-                //set next->prev to 0
-                *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = 0;
-                //set next block to begining of the list
-                *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr + (*(int *)((char *)ptr - HEADER_SIZE))))) = (*(int *)ptr);
-            }
-            else if (HAS_PREV(ptr))
-            {
-                //set prev->next to 0
-                *(int *)((char *)heap + (*(int *)((char *)ptr + OFFSET_SIZE))) = 0;
-            }
-
-            memset(ptr, 0, 2 * OFFSET_SIZE); //remove old offsets
-
-            if (*(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) == 0)
-            {
-                //if there is nothing just make it first free block of the list
-                *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
-                //set old list block to 0
-                *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr + (*(int *)((char *)ptr - HEADER_SIZE))))) = 0;
-            }
-            else
-            {
-                //set new block next to what was before in the begining of the list
-                *(int *)ptr = *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE)));
-                //set original block -> prev to the new free block
-                *(int *)((char *)heap + (*(int *)ptr) + OFFSET_SIZE) = get_memory_offset(ptr);
-                //save to the begining of the list
-                *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
-            }
+            case3(ptr);
         }
-
-        //set new block footer
-        *(int *)((char *)ptr + *(int *)((char *)ptr - HEADER_SIZE)) = *(int *)((char *)ptr - HEADER_SIZE);
-    }
-    /*
+        /*
   
         +---------------------+
         |        Free         |
@@ -545,86 +667,9 @@ int memory_free(void *ptr)
         +---------------------+
 
   */
-    else if ((*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE) > 0) && (*(int *)((char *)ptr + TOGGLE_FULL_FREE(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE) > 0))
-    {
-        printf("fourth\n");
-        //working with left free block
-
-        if (HAS_NEXT((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE))) && HAS_PREV((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE))))
+        else if ((*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE) > 0) && (*(int *)((char *)ptr + TOGGLE_FULL_FREE(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE) > 0))
         {
-            //set next->prev to curr->prev
-            *(int *)((char *)heap + (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)))) + OFFSET_SIZE) = *(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) + OFFSET_SIZE);
-            //set prev->next to curr->next
-            *(int *)((char *)heap + (*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) + OFFSET_SIZE))) = *(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)));
-        }
-        else if (HAS_NEXT((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE))))
-        {
-            //set next->prev to 0
-            *(int *)((char *)heap + *(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE))) + OFFSET_SIZE) = 0;
-            //set list offset to next block offset
-            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE))) = *(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)));
-        }
-        else if (HAS_PREV((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE))))
-        {
-            //set prev->next to 0
-            *(int *)((char *)heap + *(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) + OFFSET_SIZE)) = 0;
-        }
-        else
-        {
-            //if the free block is alone in the list just remove it
-            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE))) = 0;
-        }
-
-        //working with right free block
-        if (HAS_NEXT((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE) && HAS_PREV((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE))
-        {
-            //set next->prev to curr->prev
-            *(int *)((char *)heap + (*(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE)) + OFFSET_SIZE) = *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE + OFFSET_SIZE);
-            //set prev->next to curr->next
-            *(int *)((char *)heap + (*(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE + OFFSET_SIZE))) = *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE);
-        }
-        else if (HAS_NEXT((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE))
-        {
-            //set next->prev to 0
-            *(int *)((char *)heap + *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE) + OFFSET_SIZE) = 0;
-            //set list offset to next block offset
-            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE))) = *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE);
-        }
-        else if (HAS_PREV((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE))
-        {
-            //set prev->next to 0
-            *(int *)((char *)heap + *(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE + OFFSET_SIZE)) = 0;
-        }
-        else
-        {
-            //if the free block is alone in the list just remove it
-            *(int *)((char *)heap + get_list_offset(*(int *)(char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE)) = 0;
-        }
-
-        //fuse the left side and the right side together
-
-        //set new free block header
-        *(int *)((char *)ptr - HEADER_SIZE - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) - FOOTER_SIZE - HEADER_SIZE) = ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) + FOOTER_SIZE + HEADER_SIZE + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE + ABS(*(int *)((char *)ptr + ABS(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE));
-        //set new pointer for ease of use
-        ptr = ((char *)ptr - ABS(*(int *)((char *)ptr - HEADER_SIZE - FOOTER_SIZE)) - FOOTER_SIZE - HEADER_SIZE);
-        //set the free memory to 0
-        memset(ptr, 0, *(int *)((char *)ptr - HEADER_SIZE));
-        //set new free block footer
-        *(int *)((char *)ptr + (*(int *)((char *)ptr - HEADER_SIZE))) = *(int *)((char *)ptr - HEADER_SIZE);
-        //add new offset to the list
-        if (*(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) == 0)
-        {
-            //if the list was empty before, set the list offset to ptr
-            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
-        }
-        else
-        {
-            //if there is already free block in the list, just put it in the begining
-
-            *(int *)ptr = *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE)));
-            *(int *)((char *)heap + (*(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE)))) + OFFSET_SIZE) = get_memory_offset(ptr);
-            //put it in the begining of the list
-            *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
+            case4(ptr);
         }
     }
 }
