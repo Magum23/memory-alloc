@@ -3,6 +3,7 @@
 #include <stdlib.h> //exit()
 #include <math.h>   //log(), pow()
 #include <string.h> //memset()
+#include <time.h>
 
 //Constants
 #define MEMORY_HEADER_SIZE 0x4
@@ -50,34 +51,95 @@ int check_memory_range(void *ptr);
 
 void memory_init(void *ptr, u_int size);
 
+void z1_testovac(char *region, char **pointer, int minBlock, int maxBlock, int minMemory, int maxMemory, int testFragDefrag)
+{
+    srand(time(0));
+    unsigned int allocated = 0;
+    unsigned int mallocated = 0;
+    unsigned int allocated_count = 0;
+    unsigned int mallocated_count = 0;
+    unsigned int i = 0;
+    int random_memory = 0;
+    int random = 0;
+    memset(region, 0, 100000);
+    random_memory = (rand() % (maxMemory - minMemory + 1)) + minMemory;
+    memory_init(region + 500, random_memory);
+    if (testFragDefrag)
+    {
+        do
+        {
+            pointer[i] = memory_alloc(8);
+            if (pointer[i])
+                i++;
+        } while (pointer[i]);
+        for (int j = 0; j < i; j++)
+        {
+            if (memory_check(pointer[j]))
+            {
+                memory_free(pointer[j]);
+            }
+            else
+            {
+                printf("Error: Wrong memory check.\n");
+            }
+        }
+    }
+    i = 0;
+    while (allocated <= random_memory - minBlock)
+    {
+        random = (rand() % (maxBlock - minBlock + 1)) + minBlock;
+        if (allocated + random > random_memory)
+            continue;
+        allocated += random;
+        allocated_count++;
+        pointer[i] = memory_alloc(random);
+        if (pointer[i])
+        {
+            i++;
+            mallocated_count++;
+            mallocated += random;
+        }
+    }
+    for (int j = 0; j < i; j++)
+    {
+        if (memory_check(pointer[j]))
+        {
+            memory_free(pointer[j]);
+        }
+        else
+        {
+            printf("Error: Wrong memory check.\n");
+        }
+    }
+    memset(region + 500, 0, random_memory);
+    for (int j = 0; j < 100000; j++)
+    {
+        if (region[j] != 0)
+        {
+            region[j] = 0;
+            printf("Error: Modified memory outside the managed region. index: %d\n", j - 500);
+        }
+    }
+    float result = ((float)mallocated_count / allocated_count) * 100;
+    float result_bytes = ((float)mallocated / allocated) * 100;
+    printf("Memory size of %d bytes: allocated %.2f%% blocks (%.2f%% bytes).\n", random_memory, result, result_bytes);
+}
+
 //Main program body
 int main(void)
 {
     //Different memory sizes
     static const int small_memory_sizes[] = {50, 100, 200};
-    static const int large_memory_sizes[] = {1000, 5000, 10000, 25000, 50000};
+    static const int large_memory_sizes[] = {1000, 5000, 10000, 25000, 60000};
 
-    char region[small_memory_sizes[2]];
-    memory_init(region, small_memory_sizes[2]);
-    char *p0 = memory_alloc(10);
-    char *p1 = memory_alloc(10);
-    char *p2 = memory_alloc(10);
-    memory_free(p1); //case 1
-    char *p3 = memory_alloc(12);
-    memory_free(p3); //case 2
-    char *p4 = memory_alloc(10);
-    memory_free(p2); //case 2
-    char *p5 = memory_alloc(10);
-    char *p6 = memory_alloc(10);
-    memory_free(p5); //case 1
-    memory_free(p6); //case 4
-    char *p7 = memory_alloc(50);
-    char *p8 = memory_alloc(50);
-    char *p9 = memory_alloc(14);
-    memory_free(p8);
-    memory_free(p9);
-    memory_free(p1);
-    memory_free(p0);
+    // char region[large_memory_sizes[4]];
+    // memory_init(region, large_memory_sizes[4]);
+
+    char region[100000];
+    char *pointer[13000];
+    z1_testovac(region, pointer, 8, 24, 50, 100, 1);
+    z1_testovac(region, pointer, 8, 1000, 10000, 20000, 0);
+    z1_testovac(region, pointer, 8, 35000, 50000, 99000, 0);
 
     return 0;
 }
@@ -672,4 +734,5 @@ int memory_free(void *ptr)
             case4(ptr);
         }
     }
+    return 1;
 }
