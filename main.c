@@ -57,6 +57,28 @@ void scenario3();
 void scenario4();
 
 //Main program body
+// int main(void)
+// {
+//     char memory[170];
+//     heap = memory;
+//     memory_init(memory, 170);
+//     void *p0 = memory_alloc(15);
+//     void *p1 = memory_alloc(15);
+//     void *p2 = memory_alloc(15);
+//     void *p3 = memory_alloc(15);
+//     void *p4 = memory_alloc(15);
+//     memory_free(p2);
+
+//     for (int i = 0; i < 170; i++)
+//     {
+//         int k = memory_check((char *)heap + i);
+//         if (k)
+//         {
+//             printf("%d\n", k);
+//         }
+//     }
+//     return 0;
+// }
 int main(void)
 {
     //Different memory sizes
@@ -141,6 +163,10 @@ int main(void)
         char *p4 = memory_alloc(15);
         char *p5 = memory_alloc(15);
         char *p6 = memory_alloc(15);
+        if (memory_check(p5))
+        {
+            printf("Allocated block\n");
+        }
         char *p7 = memory_alloc(15);
         memory_free(p4);
         memory_free(p5); //freeing block scenario free/allocated/notMemory
@@ -416,17 +442,31 @@ int check_memory_range(void *ptr)
 }
 int memory_check(void *ptr)
 {
-    //check if the input pointer if pointer for sth in the array a.k.a memory
+    //check if the input pointer is pointer for sth in the array a.k.a memory
     if (check_memory_range(ptr))
     {
-        if (*(int *)((char *)ptr - HEADER_SIZE) < 0)
+        void *p = ((char *)heap + FIRST_BLOCK_OFFSET);
+        void *temp = NULL;
+        while (((char *)p) != ((char *)heap + LAST_BLOCK_OFFSSET))
         {
-            return 1;
+            if ((char *)p == (char *)ptr)
+            {
+                if (*(int *)((char *)p - HEADER_SIZE) < 0)
+                {
+                    return 1;
+                }
+            }
+            temp = ((char *)p + (ABS(*(int *)((char *)p - HEADER_SIZE)) + FOOTER_SIZE + HEADER_SIZE));
+            p = temp;
         }
-        else
+        if ((char *)p == (char *)ptr)
         {
-            return 0;
+            if (*(int *)((char *)p - HEADER_SIZE) < 0)
+            {
+                return 1;
+            }
         }
+        return 0;
     }
     else
     {
