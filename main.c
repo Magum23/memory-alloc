@@ -2,7 +2,7 @@
 #include <stdint.h> //uint32_t
 #include <stdlib.h> //exit()
 #include <math.h>   //log(), pow()
-#include <string.h> //memset()
+#include <string.h> //memset(), strcmp()
 #include <time.h>
 
 //Constants
@@ -51,95 +51,159 @@ int check_memory_range(void *ptr);
 
 void memory_init(void *ptr, u_int size);
 
-void z1_testovac(char *region, char **pointer, int minBlock, int maxBlock, int minMemory, int maxMemory, int testFragDefrag)
-{
-    srand(time(0));
-    unsigned int allocated = 0;
-    unsigned int mallocated = 0;
-    unsigned int allocated_count = 0;
-    unsigned int mallocated_count = 0;
-    unsigned int i = 0;
-    int random_memory = 0;
-    int random = 0;
-    memset(region, 0, 100000);
-    random_memory = (rand() % (maxMemory - minMemory + 1)) + minMemory;
-    memory_init(region + 500, random_memory);
-    if (testFragDefrag)
-    {
-        do
-        {
-            pointer[i] = memory_alloc(8);
-            if (pointer[i])
-                i++;
-        } while (pointer[i]);
-        for (int j = 0; j < i; j++)
-        {
-            if (memory_check(pointer[j]))
-            {
-                memory_free(pointer[j]);
-            }
-            else
-            {
-                printf("Error: Wrong memory check.\n");
-            }
-        }
-    }
-    i = 0;
-    while (allocated <= random_memory - minBlock)
-    {
-        random = (rand() % (maxBlock - minBlock + 1)) + minBlock;
-        if (allocated + random > random_memory)
-            continue;
-        allocated += random;
-        allocated_count++;
-        pointer[i] = memory_alloc(random);
-        if (pointer[i])
-        {
-            i++;
-            mallocated_count++;
-            mallocated += random;
-        }
-    }
-    for (int j = 0; j < i; j++)
-    {
-        if (memory_check(pointer[j]))
-        {
-            memory_free(pointer[j]);
-        }
-        else
-        {
-            printf("Error: Wrong memory check.\n");
-        }
-    }
-    memset(region + 500, 0, random_memory);
-    for (int j = 0; j < 100000; j++)
-    {
-        if (region[j] != 0)
-        {
-            region[j] = 0;
-            printf("Error: Modified memory outside the managed region. index: %d\n", j - 500);
-        }
-    }
-    float result = ((float)mallocated_count / allocated_count) * 100;
-    float result_bytes = ((float)mallocated / allocated) * 100;
-    printf("Memory size of %d bytes: allocated %.2f%% blocks (%.2f%% bytes).\n", random_memory, result, result_bytes);
-}
+void scenario0(int block_size, int mem_size);
+void scenario2(int mem_size);
+void scenario3();
+void scenario4();
 
 //Main program body
 int main(void)
 {
     //Different memory sizes
     static const int small_memory_sizes[] = {50, 100, 200};
-    static const int large_memory_sizes[] = {1000, 5000, 10000, 25000, 60000};
+    static const int large_memory_sizes[] = {10000, 100000};
 
-    // char region[large_memory_sizes[4]];
-    // memory_init(region, large_memory_sizes[4]);
+    char buff[3];
+    printf("Which scenario do you want to run ?\n");
+    printf("0a / 0b / 0c / 1a / 1b / 1c / 2 / 3 / 4\n");
+    fscanf(stdin, "%s", buff);
 
-    char region[100000];
-    char *pointer[13000];
-    z1_testovac(region, pointer, 8, 24, 50, 100, 1);
-    z1_testovac(region, pointer, 8, 1000, 10000, 20000, 0);
-    z1_testovac(region, pointer, 8, 35000, 50000, 99000, 0);
+    if (strcmp(buff, "0a") == 0)
+    {
+        scenario0(8, small_memory_sizes[0]);
+        scenario0(8, small_memory_sizes[1]);
+        scenario0(8, small_memory_sizes[2]);
+    }
+    else if (strcmp(buff, "0b") == 0)
+    {
+        scenario0(15, small_memory_sizes[0]);
+        scenario0(15, small_memory_sizes[1]);
+        scenario0(15, small_memory_sizes[2]);
+    }
+    else if (strcmp(buff, "0c") == 0)
+    {
+        scenario0(24, small_memory_sizes[0]);
+        scenario0(24, small_memory_sizes[1]);
+        scenario0(24, small_memory_sizes[2]);
+    }
+    else if (strcmp(buff, "1a") == 0)
+    {
+        char region1[50];
+        memory_init(region1, 50);
+        char *p0 = memory_alloc(8);
+        char *p1 = memory_alloc(8);
+        memory_free(p0); //freeing block scenario notMemory/allocated/allocated
+        if (!memory_check(p0))
+        {
+            printf("Not allocated block\n");
+        }
+        char *p2 = memory_alloc(8); //this will allocate on the same spot as p0 used to be
+        char *p3 = memory_alloc(8);
+        if (p3 == NULL)
+        {
+            printf("Memory is full.\n");
+        }
+
+        char region2[100];
+        memory_init(region2, 100);
+        char *p4 = memory_alloc(8);
+        char *p5 = memory_alloc(8);
+        char *p6 = memory_alloc(8);
+        char *p7 = memory_alloc(8);
+        memory_free(p4);
+        memory_free(p6);
+        memory_free(p5); //freeing block where the block is in the middle free/allocated/free
+        char *p8 = memory_alloc(8);
+        char *p9 = memory_alloc(8);
+        char *p10 = memory_alloc(8);
+
+        char region3[200];
+        memory_init(region3, 200);
+        char *p11 = memory_alloc(8);
+        char *p12 = memory_alloc(8);
+        char *p13 = memory_alloc(8);
+        memory_free(p13); //freeing block scenario allocated/allocated/free
+        char *p14 = memory_alloc(8);
+        memory_free(p12); //freeing block scenario allocated/allocated/allocated
+    }
+    else if (strcmp(buff, "1b") == 0)
+    {
+        char region1[50];
+        memory_init(region1, 50);
+        char *p0 = memory_alloc(15);
+        char *p1 = memory_alloc(15); //cant allocate
+        char *p2 = memory_alloc(15); //cant allocate
+        memory_free(p0);             //freeing block scenario notMemory/allocated/notMemory
+
+        char region2[100];
+        memory_init(region2, 100);
+        char *p3 = memory_alloc(15);
+        char *p4 = memory_alloc(15);
+        char *p5 = memory_alloc(15);
+        char *p6 = memory_alloc(15);
+        char *p7 = memory_alloc(15);
+        memory_free(p4);
+        memory_free(p5); //freeing block scenario free/allocated/notMemory
+        char *p8 = memory_alloc(15);
+
+        char region3[200];
+        memory_init(region3, 200);
+        char *p9 = memory_alloc(15);
+        char *p10 = memory_alloc(15);
+        char *p11 = memory_alloc(15);
+        char *p12 = memory_alloc(15);
+        char *p13 = memory_alloc(15);
+        char *p14 = memory_alloc(15);
+        memory_free(p11);
+        memory_free(p12); //freeing block scenario free/allocated/allocated
+    }
+    else if (strcmp(buff, "1c") == 0)
+    {
+        char region1[50];
+        memory_init(region1, 50);
+        char *p0 = memory_alloc(24);
+        char *p1 = memory_alloc(24); //cant allocate
+        char *p2 = memory_alloc(24); //cant allocate
+        if (p2 == NULL)
+        {
+            printf("Couldnt allocate p2\n");
+        }
+        memory_free(p0); //freeing block scenario notMemory/allocated/notMemory
+
+        char region2[100];
+        memory_init(region2, 100);
+        char *p3 = memory_alloc(24);
+        char *p4 = memory_alloc(24);
+        char *p5 = memory_alloc(24); //this wont be allocated baecause of lack of space
+        memory_free(p3);
+        memory_free(p4); //just free everything from the memory
+
+        char region3[200];
+        memory_init(region3, 200);
+        char *p6 = memory_alloc(24);
+        char *p7 = memory_alloc(24);
+        char *p8 = memory_alloc(24);
+        memory_free(p8);
+        memory_free(p6);
+        char *p9 = memory_alloc(24);
+        char *p10 = memory_alloc(24);
+        char *p11 = memory_alloc(24);
+        memory_free(p11);
+    }
+    else if (strcmp(buff, "2") == 0)
+    {
+        scenario2(small_memory_sizes[0]);
+        scenario2(small_memory_sizes[1]);
+        scenario2(small_memory_sizes[2]);
+    }
+    else if (strcmp(buff, "3") == 0)
+    {
+        scenario3();
+    }
+    else if (strcmp(buff, "4") == 0)
+    {
+        scenario4();
+    }
 
     return 0;
 }
@@ -194,7 +258,6 @@ int get_list_offset(int size) // returns
         }
     }
 }
-
 int find_free_block(u_int size)
 {
 
@@ -232,11 +295,15 @@ int find_free_block(u_int size)
     }
     return 0;
 }
-
 void *memory_alloc(u_int size)
 
 {
     void *ptr = NULL;
+
+    if ((size % 2) != 0) //make the size devisor of 2
+    {
+        size += 1;
+    }
 
     if (find_free_block(size) != 0) //if free block is avalaible
     {
@@ -347,7 +414,6 @@ int check_memory_range(void *ptr)
     }
     return 0;
 }
-
 int memory_check(void *ptr)
 {
     //check if the input pointer if pointer for sth in the array a.k.a memory
@@ -367,7 +433,6 @@ int memory_check(void *ptr)
         return 0;
     }
 }
-
 int get_memory_offset(void *ptr)
 {
     for (int i = 0; i <= (*(int *)heap) + MEMORY_HEADER_SIZE; i++)
@@ -625,10 +690,13 @@ void case4(void *ptr)
         *(int *)((char *)heap + get_list_offset(*(int *)((char *)ptr - HEADER_SIZE))) = get_memory_offset(ptr);
     }
 }
-
 int memory_free(void *ptr)
 {
-    if (ptr == (char *)heap + FIRST_BLOCK_OFFSET)
+    if (ptr == (char *)heap + FIRST_BLOCK_OFFSET && ptr == (char *)heap + LAST_BLOCK_OFFSSET)
+    {
+        case1(ptr);
+    }
+    else if (ptr == (char *)heap + FIRST_BLOCK_OFFSET)
     {
         if (*(int *)((char *)ptr + TOGGLE_FULL_FREE(*(int *)((char *)ptr - HEADER_SIZE)) + FOOTER_SIZE) < 0)
         {
@@ -735,4 +803,173 @@ int memory_free(void *ptr)
         }
     }
     return 1;
+}
+
+void scenario0(int block_size, int mem_size)
+{
+    int random = 0;
+    void *p = NULL;
+    float usable_memory_size = FIRST_FREE_BLOCK_SIZE(mem_size) + HEADER_SIZE + FOOTER_SIZE;
+    float percentage = 0;
+    printf("\n==================================================\n\n");
+    printf("Memory allocation scenario 0:\nMemory size: %dB\nActual usable memory size: %dB\nPayload size: %dB", mem_size, (int)usable_memory_size, block_size);
+
+    char region[mem_size];
+    memory_init(region, mem_size);
+    float counter = 0;
+    int full = 0;
+    int costs = 0;
+    int frag = 0;
+    while (!full)
+    {
+        p = memory_alloc(block_size);
+        if (p == NULL)
+        {
+            full = 1;
+        }
+        else
+        {
+            counter += block_size;
+            costs += HEADER_SIZE + FOOTER_SIZE;
+            frag += ABS(*(int *)((char *)p - HEADER_SIZE)) - block_size;
+        }
+    }
+    percentage = counter / usable_memory_size * 100;
+    printf("Memory header and list size: %dB\n", MEMORY_HEADER_SIZE + LIST_SIZE(mem_size));
+    printf("Costs: %dB\n", costs);
+    printf("Internal fragmentation: %dB\n", frag);
+    printf("Intended sum of memory: %dB\n", (int)counter);
+    printf("Memory allocated(): %.2f %%\n", percentage);
+    printf("\n==================================================\n\n");
+}
+void scenario2(int mem_size)
+{
+    srand(time(0));
+    int random = 0;
+    void *p = NULL;
+    float usable_memory_size = FIRST_FREE_BLOCK_SIZE(mem_size) + HEADER_SIZE + FOOTER_SIZE;
+    float percentage = 0;
+    printf("\n==================================================\n\n");
+    printf("Memory allocation scenario 2:\nMemory size: %d\n", mem_size);
+    printf("Memory header and list size: %dB\n", MEMORY_HEADER_SIZE + LIST_SIZE(mem_size));
+
+    for (int i = 0; i < 5; i++)
+    {
+        char region[mem_size];
+        memory_init(region, mem_size);
+        random = rand() % 16 + 8;
+        float counter = 0;
+        int full = 0;
+        int costs = 0;
+        int frag = 0;
+        while (!full)
+        {
+            p = memory_alloc(random);
+            if (p == NULL)
+            {
+                full = 1;
+            }
+            else
+            {
+                counter += random;
+                costs += HEADER_SIZE + FOOTER_SIZE;
+                frag += ABS(*(int *)((char *)p - HEADER_SIZE)) - random;
+            }
+        }
+        percentage = counter / usable_memory_size * 100;
+        printf("\nPayload size: %dB\n", random);
+        printf("Costs: %dB\n", costs);
+        printf("Internal fragmentation: %dB\n", frag);
+        printf("Intended sum of memory: %dB\n", (int)counter);
+        printf("Memory allocated: %.2f %%\n", percentage);
+    }
+    printf("\n==================================================\n\n");
+}
+void scenario3()
+{
+    const int mem_size = 10000;
+    srand(time(0));
+    int random = 0;
+    void *p = NULL;
+    float usable_memory_size = FIRST_FREE_BLOCK_SIZE(mem_size) + HEADER_SIZE + FOOTER_SIZE;
+    float percentage = 0;
+    printf("\n==================================================\n\n");
+    printf("Memory allocation scenario 3:\nMemory size: %d\n", mem_size);
+    printf("Memory header and list size: %dB\n", MEMORY_HEADER_SIZE + LIST_SIZE(mem_size));
+
+    for (int i = 0; i < 5; i++)
+    {
+        char region[mem_size];
+        memory_init(region, mem_size);
+        random = rand() % 4500 + 500;
+        float counter = 0;
+        int full = 0;
+        int costs = 0;
+        int frag = 0;
+        while (!full)
+        {
+            p = memory_alloc(random);
+            if (p == NULL)
+            {
+                full = 1;
+            }
+            else
+            {
+                counter += random;
+                costs += HEADER_SIZE + FOOTER_SIZE;
+                frag += ABS(*(int *)((char *)p - HEADER_SIZE)) - random;
+            }
+        }
+        percentage = counter / usable_memory_size * 100;
+        printf("\nPayload size: %dB\n", random);
+        printf("Costs: %dB\n", costs);
+        printf("Internal fragmentation: %dB\n", frag);
+        printf("Intended sum of memory: %dB\n", (int)counter);
+        printf("Memory allocated: %.2f %%\n", percentage);
+    }
+    printf("\n==================================================\n\n");
+}
+void scenario4()
+{
+    const int mem_size = 100000;
+    srand(time(0));
+    int random = 0;
+    void *p = NULL;
+    float usable_memory_size = FIRST_FREE_BLOCK_SIZE(mem_size) + HEADER_SIZE + FOOTER_SIZE;
+    float percentage = 0;
+    printf("\n==================================================\n\n");
+    printf("Memory allocation scenario 4:\nMemory size: %d\n", mem_size);
+    printf("Memory header and list size: %dB\n", MEMORY_HEADER_SIZE + LIST_SIZE(mem_size));
+
+    for (int i = 0; i < 5; i++)
+    {
+        char region[mem_size];
+        memory_init(region, mem_size);
+        random = rand() % 49992 + 8;
+        float counter = 0;
+        int full = 0;
+        int costs = 0;
+        int frag = 0;
+        while (!full)
+        {
+            p = memory_alloc(random);
+            if (p == NULL)
+            {
+                full = 1;
+            }
+            else
+            {
+                counter += random;
+                costs += HEADER_SIZE + FOOTER_SIZE;
+                frag += ABS(*(int *)((char *)p - HEADER_SIZE)) - random;
+            }
+        }
+        percentage = counter / usable_memory_size * 100;
+        printf("\nPayload size: %dB\n", random);
+        printf("Costs: %dB\n", costs);
+        printf("Internal fragmentation: %dB\n", frag);
+        printf("Intended sum of memory: %dB\n", (int)counter);
+        printf("Memory allocated: %.2f %%\n", percentage);
+    }
+    printf("\n==================================================\n\n");
 }
