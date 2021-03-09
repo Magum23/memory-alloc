@@ -6,7 +6,7 @@ void *heap = NULL;
 int main(void)
 {
 
-    char region[] = {-1, -1, -1, 1};
+    char region[] = {-84, 0, 0, 0};
     printf("%d\n", *(int *)region);
 
     return 0;

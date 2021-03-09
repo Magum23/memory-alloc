@@ -56,29 +56,6 @@ void scenario2(int mem_size);
 void scenario3();
 void scenario4();
 
-//Main program body
-// int main(void)
-// {
-//     char memory[170];
-//     heap = memory;
-//     memory_init(memory, 170);
-//     void *p0 = memory_alloc(15);
-//     void *p1 = memory_alloc(15);
-//     void *p2 = memory_alloc(15);
-//     void *p3 = memory_alloc(15);
-//     void *p4 = memory_alloc(15);
-//     memory_free(p2);
-
-//     for (int i = 0; i < 170; i++)
-//     {
-//         int k = memory_check((char *)heap + i);
-//         if (k)
-//         {
-//             printf("%d\n", k);
-//         }
-//     }
-//     return 0;
-// }
 int main(void)
 {
     //Different memory sizes
@@ -144,9 +121,16 @@ int main(void)
         char *p11 = memory_alloc(8);
         char *p12 = memory_alloc(8);
         char *p13 = memory_alloc(8);
-        memory_free(p13); //freeing block scenario allocated/allocated/free
         char *p14 = memory_alloc(8);
-        memory_free(p12); //freeing block scenario allocated/allocated/allocated
+        char *p15 = memory_alloc(8);
+        char *p16 = memory_alloc(8);
+        char *p17 = memory_alloc(8);
+        char *p18 = memory_alloc(8);
+        char *p19 = memory_alloc(8);
+        memory_free(p12);
+        memory_free(p14);
+        memory_free(p16);
+        memory_free(p18);
     }
     else if (strcmp(buff, "1b") == 0)
     {
@@ -842,7 +826,7 @@ int memory_free(void *ptr)
             case4(ptr);
         }
     }
-    return 1;
+    return 0;
 }
 
 void scenario0(int block_size, int mem_size)
@@ -921,7 +905,9 @@ void scenario2(int mem_size)
         printf("Costs: %dB\n", costs);
         printf("Internal fragmentation: %dB\n", frag);
         printf("Intended sum of memory: %dB\n", (int)counter);
-        printf("Memory allocated: %.2f %%\n", percentage);
+        printf("Theoretical allocated volume: %.2f%%\n", counter / mem_size * 100);
+        printf("Memory allocated (without internal fragmentation): %.2f %%\n", percentage);
+        printf("Memory allocated : %.2f %%\n", (counter + frag) / usable_memory_size * 100);
     }
     printf("\n==================================================\n\n");
 }
@@ -965,7 +951,9 @@ void scenario3()
         printf("Costs: %dB\n", costs);
         printf("Internal fragmentation: %dB\n", frag);
         printf("Intended sum of memory: %dB\n", (int)counter);
-        printf("Memory allocated: %.2f %%\n", percentage);
+        printf("Theoretical allocated volume: %.2f%%\n", counter / mem_size * 100);
+        printf("Memory allocated  (without internal fragmentation): %.2f %%\n", percentage);
+        printf("Memory allocated : %.2f %%\n", (counter + frag) / usable_memory_size * 100);
     }
     printf("\n==================================================\n\n");
 }
@@ -1009,7 +997,9 @@ void scenario4()
         printf("Costs: %dB\n", costs);
         printf("Internal fragmentation: %dB\n", frag);
         printf("Intended sum of memory: %dB\n", (int)counter);
-        printf("Memory allocated: %.2f %%\n", percentage);
+        printf("Theoretical allocated volume: %.2f%%\n", counter / mem_size * 100);
+        printf("Memory allocated (without internal fragmentation): %.2f %%\n", percentage);
+        printf("Memory allocated : %.2f %%\n", (counter + frag) / usable_memory_size * 100);
     }
     printf("\n==================================================\n\n");
 }
